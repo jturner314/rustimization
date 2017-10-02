@@ -1,22 +1,31 @@
 use cg_minimizer::CG;
 use lbfgsb_minimizer::Lbfgsb;
+
+#[allow(non_camel_case_types)]
+pub enum MinMethod {
+    L_BFGS_B,
+    CG,
+}
+
 pub struct Funcmin<'a> {
-    x: &'a mut Vec<f64>,
-    f: &'a Fn(&Vec<f64>) -> f64,
-    g: &'a Fn(&Vec<f64>) -> Vec<f64>,
+    x: &'a mut [f64],
+    f: &'a Fn(&[f64]) -> f64,
+    g: &'a Fn(&[f64]) -> Vec<f64>,
     tol: f64,
     verbose: bool,
-    method: &'a str,
+    method: MinMethod,
     max_iter: u32,
 }
+
 impl<'a> Funcmin<'a> {
-    // constructor requres three mendatory parameter which is the initial solution, function and the gradient function
-    pub fn new(xvec: &'a mut Vec<f64>,
-               func: &'a Fn(&Vec<f64>) -> f64,
-               gd: &'a Fn(&Vec<f64>) -> Vec<f64>,
-               m: &'a str)
-               -> Self {
-        // creating Funcmin struct
+    // constructor requres three mendatory parameter which is the initial
+    // solution, function and the gradient function
+    pub fn new(
+        xvec: &'a mut [f64],
+        func: &'a Fn(&[f64]) -> f64,
+        gd: &'a Fn(&[f64]) -> Vec<f64>,
+        m: MinMethod,
+    ) -> Self {
         Funcmin {
             x: xvec,
             f: func,
@@ -27,43 +36,38 @@ impl<'a> Funcmin<'a> {
             method: m,
         }
     }
-    // this function will start the optimization algorithm
-    pub fn minimize(&mut self) {
-        let ver = if self.verbose {
-            0
-        } else {
-            1
-        };
-        {
-            if self.method == "lbfgsb" {
-                let mut minf = Lbfgsb::new(&mut self.x, self.f, self.g);
-                minf.set_verbosity(ver);
-                minf.set_tolerance(self.tol);
-                minf.max_iteration(self.max_iter);
-                minf.minimize();
-            } else if self.method == "cg" {
-                let mut minf = CG::new(&mut self.x, self.f, self.g);
-                minf.set_verbosity(vec![ver, 0]);
-                minf.set_tolerance(self.tol);
-                minf.max_iteration(self.max_iter);
-                minf.minimize();
-            } else {
-                println!("wrong method provided");
-            }
 
+    pub fn minimize(&mut self) {
+        let ver = if self.verbose { 0 } else { 1 };
+        {
+            match self.method {
+                MinMethod::L_BFGS_B => {
+                    let mut minf = Lbfgsb::new(&mut self.x, self.f, self.g);
+                    minf.set_verbosity(ver);
+                    minf.set_tolerance(self.tol);
+                    minf.max_iteration(self.max_iter);
+                    minf.minimize();
+                }
+                MinMethod::CG => {
+                    let mut minf = CG::new(&mut self.x, self.f, self.g);
+                    minf.set_verbosity(vec![ver, 0]);
+                    minf.set_tolerance(self.tol);
+                    minf.max_iteration(self.max_iter);
+                    minf.minimize();
+                }
+            }
         }
     }
-    // this function returns the solution after minimization
-    pub fn get_x(&self) -> Vec<f64> {
-        self.x.clone()
-    }
+
     pub fn set_tolerance(&mut self, t: f64) {
         self.tol = t;
     }
+
     // set max iteration
     pub fn max_iteration(&mut self, i: u32) {
         self.max_iter = i;
     }
+
     pub fn set_verbosity(&mut self, b: bool) {
         self.verbose = b;
     }
