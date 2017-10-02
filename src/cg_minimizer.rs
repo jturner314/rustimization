@@ -15,13 +15,15 @@ pub enum Error {
     LineSearch,
 }
 
-pub struct CG<'a> {
+pub struct CG<'a, F>
+where
+    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+{
     n: c_int,
     x: &'a mut [c_double],
     d: Vec<c_double>,
     gold: Vec<c_double>,
-    f: &'a Fn(&[c_double]) -> c_double,
-    g: &'a Fn(&[c_double]) -> Vec<c_double>,
+    f: F,
     eps: c_double,
     w: Vec<c_double>,
     iflag: c_int,
@@ -32,14 +34,13 @@ pub struct CG<'a> {
     max_iter: Option<u32>,
 }
 
-impl<'a> CG<'a> {
+impl<'a, F> CG<'a, F>
+where
+    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+{
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
-    pub fn new(
-        xvec: &'a mut [c_double],
-        func: &'a Fn(&[c_double]) -> c_double,
-        gd: &'a Fn(&[c_double]) -> Vec<c_double>,
-    ) -> Self {
+    pub fn new(xvec: &'a mut [c_double], func: F) -> Self {
         let len = xvec.len() as i32;
         // creating CG struct
         CG {
@@ -47,7 +48,6 @@ impl<'a> CG<'a> {
             x: xvec,
             d: vec![0.0f64; len as usize],
             f: func,
-            g: gd,
             eps: 1.0e-7,
             w: vec![0.0f64; len as usize],
             gold: vec![0.0f64; len as usize],
@@ -62,10 +62,7 @@ impl<'a> CG<'a> {
 
     // this function will start the optimization algorithm
     pub fn minimize(&mut self) -> Result<Success, Error> {
-        let func = self.f;
-        let grad = self.g;
-        let mut fval = func(self.x);
-        let mut gval = grad(self.x);
+        let (mut fval, mut gval) = (self.f)(self.x);
         let icall = 0;
         loop {
             step(
@@ -101,8 +98,9 @@ impl<'a> CG<'a> {
                 }
                 1 => {
                     // geting the function and gradient value
-                    fval = func(self.x);
-                    gval = grad(self.x);
+                    let vals = (self.f)(self.x);
+                    fval = vals.0;
+                    gval = vals.1;
                 }
                 2 => {
                     // termination check

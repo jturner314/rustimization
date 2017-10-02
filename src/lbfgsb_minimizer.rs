@@ -23,15 +23,17 @@ pub enum Error {
     },
 }
 
-pub struct Lbfgsb<'a> {
+pub struct Lbfgsb<'a, F>
+where
+    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+{
     n: c_int,
     m: c_int,
     x: &'a mut [c_double],
     l: Vec<c_double>,
     u: Vec<c_double>,
     nbd: Vec<c_int>,
-    f: &'a Fn(&[c_double]) -> c_double,
-    g: &'a Fn(&[c_double]) -> Vec<c_double>,
+    f: F,
     factr: c_double,
     pgtol: c_double,
     wa: Vec<c_double>,
@@ -45,14 +47,13 @@ pub struct Lbfgsb<'a> {
     max_iter: Option<u32>,
 }
 
-impl<'a> Lbfgsb<'a> {
+impl<'a, F> Lbfgsb<'a, F>
+where
+    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+{
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
-    pub fn new(
-        xvec: &'a mut [c_double],
-        func: &'a Fn(&[c_double]) -> c_double,
-        gd: &'a Fn(&[c_double]) -> Vec<c_double>,
-    ) -> Self {
+    pub fn new(xvec: &'a mut [c_double], func: F) -> Self {
         let len = xvec.len() as i32;
         Lbfgsb {
             n: len,
@@ -62,7 +63,6 @@ impl<'a> Lbfgsb<'a> {
             u: vec![0.0f64; len as usize],
             nbd: vec![0; len as usize],
             f: func,
-            g: gd,
             factr: 0.0e0,
             pgtol: 0.0e0,
             wa: vec![0.0f64; (2 * 5 * len + 11 * 5 * 5 + 5 * len + 8 * 5) as usize],
@@ -81,8 +81,6 @@ impl<'a> Lbfgsb<'a> {
     pub fn minimize(&mut self) -> Result<Success, Error> {
         let mut fval = 0.0f64;
         let mut gval = vec![0.0f64; self.x.len()];
-        let func = self.f;
-        let grad = self.g;
         // converting fortran string "START"
         stringfy(&mut self.task);
         loop {
@@ -109,8 +107,9 @@ impl<'a> Lbfgsb<'a> {
             // converting to rust string
             let tsk = unsafe { CStr::from_ptr(self.task.as_ptr()).to_string_lossy() };
             if tsk.starts_with("FG") {
-                fval = func(self.x);
-                gval = grad(self.x);
+                let vals = (self.f)(self.x);
+                fval = vals.0;
+                gval = vals.1;
             }
             if tsk.starts_with("NEW_X") && self.max_iter.is_none()
                 && self.dsave[11] <= 1.0e-10 * (1.0e0 + fval.abs())
