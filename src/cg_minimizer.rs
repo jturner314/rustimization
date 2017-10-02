@@ -1,11 +1,13 @@
 use libc::{c_double, c_int};
 use cg::step;
 
+#[derive(Debug)]
 pub enum Success {
     Converged,
     ReachedMaxIter,
 }
 
+#[derive(Debug)]
 pub enum Error {
     /// Improper input parameters.
     BadInput,

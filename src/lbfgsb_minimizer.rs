@@ -3,6 +3,7 @@ use std::ffi::CStr;
 use lbfgsb::step;
 use string::stringfy;
 
+#[derive(Debug)]
 pub enum Success {
     /// The projected gradient is sufficiently small.
     ProjectedGradient,
@@ -10,6 +11,7 @@ pub enum Success {
     ReachedMaxIter,
 }
 
+#[derive(Debug)]
 pub enum Error {
     /// The routine has detected an error in the input parameters.
     BadInput,
