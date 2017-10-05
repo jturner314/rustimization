@@ -5,10 +5,11 @@ use string::stringfy;
 
 #[derive(Debug)]
 pub enum Success {
-    /// The projected gradient is sufficiently small.
-    ProjectedGradient,
     Converged,
-    ReachedMaxIter,
+    ReachedMaxIter {
+        /// f(x) and g(x)
+        f_g_x: (c_double, Vec<c_double>),
+    },
 }
 
 #[derive(Debug)]
@@ -18,34 +19,77 @@ pub enum Error {
     /// The routine has terminated abnormally without being able to satisfy the
     /// termination conditions. `x` contains the best approximation found.
     AbnormalExit {
-        /// f(x)
-        f_x: c_double,
-        /// g(x)
-        g_x: Vec<c_double>,
+        /// f(x) and g(x)
+        f_g_x: (c_double, Vec<c_double>),
     },
 }
+
+const CSAVE_LEN: usize = 60;
+const LSAVE_LEN: usize = 4;
+const ISAVE_LEN: usize = 44;
+const DSAVE_LEN: usize = 29;
 
 pub struct Lbfgsb<'a, F>
 where
     F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
 {
+    /// Number of variables.
     n: c_int,
+    /// Number of corrections used in the limited memory matrix. Values of m <
+    /// 3 are not recommended, and large values of m can result in excessive
+    /// computing time. The range 3 <= m <= 20 is recommended.
     m: c_int,
+    /// Initial guess and then, on successful exit, best solution found.
     x: &'a mut [c_double],
+    /// Lower bounds on variables.
     l: Vec<c_double>,
+    /// Upper bounds on variables.
     u: Vec<c_double>,
+    /// Types of bounds on variables.
     nbd: Vec<c_int>,
+    /// Objective and gradient function.
     f: F,
+    /// Tolerance in function value termination test. Iteration will stop when
+    /// `(f^k - f^{k+1})/max{|f^k|,|f^{k+1}|,1} <= factr*epsmch`
+    /// where `epsmch` is the machine precision.
+    ///
+    /// Typical values for factr on a computer with 15 digits of accuracy in
+    /// double precision are `factr` =
+    ///
+    /// * 1.e12 for low accuracy;
+    /// * 1.e7  for moderate accuracy;
+    /// * 1.e1  for extremely high accuracy.
+    ///
+    /// The user can suppress this termination test by setting `factr` to `0.`.
     factr: c_double,
+    /// Tolerance in projected gradient termination test. Iteration
+    /// will stop when `max{|proj g_i | i = 1, ..., n} <= pgtol`
+    /// where `proj g_i` is the `i`th component of the projected gradient.
+    /// The user can suppress this termination test by setting `pgtol` to `0.`.
     pgtol: c_double,
+    /// Working array for the routine.
     wa: Vec<c_double>,
+    /// Working array for the routine.
     iwa: Vec<c_int>,
     task: Vec<c_char>,
+    /// Controls the frequency and type of output generated:
+    ///
+    /// * `iprint<0` no output is generated;
+    /// * `iprint=0` print only one line at the last iteration;
+    /// * `0<iprint<99` print also `f` and `|proj g|` every `iprint` iterations;
+    /// * `iprint=99` print details of every iteration except n-vectors;
+    /// * `iprint=100` print also the changes of active set and final `x`;
+    /// `iprint>100` print details of every iteration including `x` and `g`;
+    /// When `iprint > 0`, the file `iterate.dat` will be created to summarize the iteration.
     iprint: c_int,
-    csave: Vec<c_char>,
-    lsave: Vec<c_int>,
-    isave: Vec<c_int>,
-    dsave: Vec<c_double>,
+    /// Working array for the routine.
+    csave: [c_char; CSAVE_LEN],
+    /// Working array for the routine.
+    lsave: [c_int; LSAVE_LEN],
+    /// Working array for the routine.
+    isave: [c_int; ISAVE_LEN],
+    /// Working array for the routine.
+    dsave: [c_double; DSAVE_LEN],
     max_iter: Option<u32>,
 }
 
@@ -56,26 +100,26 @@ where
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
     pub fn new(xvec: &'a mut [c_double], func: F) -> Self {
-        let len = xvec.len() as i32;
+        let len = xvec.len();
         Lbfgsb {
-            n: len,
-            m: 5,
+            n: len as i32,
+            m: 10, // `scipy.optimize.fmin_l_bfgs_b` default
             x: xvec,
-            l: vec![0.0f64; len as usize],
-            u: vec![0.0f64; len as usize],
-            nbd: vec![0; len as usize],
+            l: vec![0.; len],
+            u: vec![0.; len],
+            nbd: vec![0; len],
             f: func,
-            factr: 0.0e0,
-            pgtol: 0.0e0,
-            wa: vec![0.0f64; (2 * 5 * len + 11 * 5 * 5 + 5 * len + 8 * 5) as usize],
-            iwa: vec![0; 3 * len as usize],
+            factr: 1e7,  // `scipy.optimize.fmin_l_bfgs_b` default
+            pgtol: 1e-5, // `scipy.optimize.fmin_l_bfgs_b` default
+            wa: vec![0.; (2 * 5 * len + 11 * 5 * 5 + 5 * len + 8 * 5)],
+            iwa: vec![0; 3 * len],
             task: vec![0; 60],
             iprint: -1,
-            csave: vec![0; 60],
-            lsave: vec![0, 0, 0, 0],
-            isave: vec![0; 44],
-            dsave: vec![0.0f64; 29],
-            max_iter: None,
+            csave: [0; CSAVE_LEN],
+            lsave: [0; LSAVE_LEN],
+            isave: [0; ISAVE_LEN],
+            dsave: [0.; DSAVE_LEN],
+            max_iter: Some(15000), // `scipy.optimize.fmin_l_bfgs_b` default
         }
     }
 
@@ -113,13 +157,13 @@ where
                 fval = vals.0;
                 gval = vals.1;
             }
-            if tsk.starts_with("NEW_X") && self.max_iter.is_none()
-                && self.dsave[11] <= 1.0e-10 * (1.0e0 + fval.abs())
-            {
-                return Ok(Success::ProjectedGradient);
-            }
-            if self.max_iter.is_some() && self.iteration() >= self.max_iter.unwrap() as i32 {
-                return Ok(Success::ReachedMaxIter);
+            if tsk.starts_with("NEW_X") {
+                if self.max_iter.is_some() && self.iteration() >= self.max_iter.unwrap() as i32 {
+                    return Ok(Success::ReachedMaxIter {
+                        f_g_x: (fval, gval),
+                    });
+                }
+                // TODO: add callback to check convergence here
             }
             if tsk.starts_with("CONV") {
                 return Ok(Success::Converged);
@@ -129,8 +173,7 @@ where
             }
             if tsk.starts_with("ABNO") {
                 return Err(Error::AbnormalExit {
-                    f_x: fval,
-                    g_x: gval,
+                    f_g_x: (fval, gval),
                 });
             }
         }
