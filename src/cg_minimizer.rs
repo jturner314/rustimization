@@ -17,6 +17,16 @@ pub enum Error {
     LineSearch,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Method {
+    /// Fletcher–Reeves
+    FletcherReeves = 1,
+    /// Polak–Ribière
+    PolakRibiere = 2,
+    /// Positive Polak–Ribière (β = max(β,0))
+    PositivePolakRibiere = 3,
+}
+
 pub struct CG<'a, F>
 where
     F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
@@ -30,10 +40,11 @@ where
     w: Vec<c_double>,
     iflag: c_int,
     irest: c_int,
-    iprint: Vec<c_int>,
-    method: c_int,
+    iprint: [c_int; 2],
+    method: Method,
+    gtol: c_double,
     finish: c_int,
-    max_iter: Option<u32>,
+    max_iter: Option<usize>,
 }
 
 impl<'a, F> CG<'a, F>
@@ -43,21 +54,22 @@ where
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
     pub fn new(xvec: &'a mut [c_double], func: F) -> Self {
-        let len = xvec.len() as i32;
+        let len = xvec.len();
         // creating CG struct
         CG {
-            n: len,
+            n: len as i32,
             x: xvec,
-            d: vec![0.0f64; len as usize],
+            d: vec![0.; len],
             f: func,
-            eps: 1.0e-7,
-            w: vec![0.0f64; len as usize],
-            gold: vec![0.0f64; len as usize],
-            iprint: vec![1, 3],
+            eps: 1e-7,
+            w: vec![0.; len],
+            gold: vec![0.; len],
+            iprint: [-1, 0],
             iflag: 0,
             irest: 0,
-            method: 1,
-            max_iter: Some(10000),
+            method: Method::FletcherReeves,
+            gtol: 1e-5,                // `scipy.optimize.fmin_cg` default
+            max_iter: Some(200 * len), // `scipy.optimize.fmin_cg` default
             finish: 0,
         }
     }
@@ -65,8 +77,11 @@ where
     // this function will start the optimization algorithm
     pub fn minimize(&mut self) -> Result<Success, Error> {
         let (mut fval, mut gval) = (self.f)(self.x);
-        let icall = 0;
+        let mut iter_num = 0;
         loop {
+            if self.max_iter.is_some() && iter_num >= self.max_iter.unwrap() {
+                return Ok(Success::ReachedMaxIter);
+            }
             step(
                 self.n,
                 &mut self.x,
@@ -79,12 +94,10 @@ where
                 self.eps,
                 &mut self.iflag,
                 self.irest,
-                self.method,
+                self.method as i32,
                 self.finish,
             );
-            if self.max_iter.is_some() && icall > self.max_iter.unwrap() {
-                return Ok(Success::ReachedMaxIter);
-            }
+            iter_num += 1;
             match self.iflag {
                 -3 => {
                     return Err(Error::BadInput);
@@ -104,24 +117,16 @@ where
                     fval = vals.0;
                     gval = vals.1;
                 }
-                2 => {
-                    // termination check
+                2 => if gval.iter().all(|g| g.abs() <= self.gtol) {
                     self.finish = 1;
-                    let tlev = self.eps * (1.0 + fval.abs());
-                    for l in gval.iter().take(self.x.len()) {
-                        if *l > tlev {
-                            self.finish = 0;
-                            break;
-                        }
-                    }
-                }
+                },
                 iflag => panic!("Unknown iflag value {}", iflag),
             }
         }
     }
 
     // set max iteration
-    pub fn max_iteration(&mut self, i: u32) {
+    pub fn max_iteration(&mut self, i: usize) {
         self.max_iter = Some(i);
     }
 
@@ -139,7 +144,7 @@ where
     // vec[1] = 1 : INITIAL X AND GRADIENT VECTORS PRINTED
     // vec[1] = 2 : X VECTOR PRINTED EVERY ITERATION
     // vec[1] = 3 : X VECTOR AND GRADIENT VECTOR PRINTED
-    pub fn set_verbosity(&mut self, v: Vec<i32>) {
+    pub fn set_verbosity(&mut self, v: [i32; 2]) {
         self.iprint = v;
     }
 
