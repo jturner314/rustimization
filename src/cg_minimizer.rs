@@ -1,5 +1,6 @@
 use libc::{c_double, c_int};
 use cg::step;
+use std::{error, fmt};
 
 #[derive(Debug)]
 pub enum Success {
@@ -15,6 +16,27 @@ pub enum Error {
     NoDescent,
     /// Line search failure.
     LineSearch,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error in CG minimization: ")?;
+        error::Error::description(self).fmt(f)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::BadInput => "Improper input parameters",
+            Error::NoDescent => "Descent was not obtained",
+            Error::LineSearch => "Line search failure",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
