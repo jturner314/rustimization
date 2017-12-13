@@ -20,8 +20,8 @@ pub enum Error {
     #[fail(display = "line search failure")]
     LineSearch,
     /// The objective function returned an error.
-    #[fail(display = "error in objective function")]
-    ObjectiveFn(failure::Error),
+    #[fail(display = "error in objective function: {}", cause)]
+    ObjectiveFn { cause: failure::Error },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -85,7 +85,8 @@ where
 
     // this function will start the optimization algorithm
     pub fn minimize(&mut self) -> Result<Success, Error> {
-        let (mut fval, mut gval) = (self.f)(self.x).map_err(|err| Error::ObjectiveFn(err.into()))?;
+        let (mut fval, mut gval) =
+            (self.f)(self.x).map_err(|err| Error::ObjectiveFn { cause: err })?;
         let mut iter_num = 0;
         loop {
             if self.max_iter.is_some() && iter_num >= self.max_iter.unwrap() {
@@ -122,7 +123,7 @@ where
                 }
                 1 => {
                     // geting the function and gradient value
-                    let vals = (self.f)(self.x).map_err(|err| Error::ObjectiveFn(err.into()))?;
+                    let vals = (self.f)(self.x).map_err(|err| Error::ObjectiveFn { cause: err })?;
                     fval = vals.0;
                     gval = vals.1;
                 }
