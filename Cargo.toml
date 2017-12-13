@@ -10,7 +10,10 @@ documentation = "https://github.com/noshu/rustimization"
 description = """
 A rust optimization library which includes L-BFGS-B and Conjugate Gradient algorithm
 """
+
 [dependencies]
 lbfgsb-sys = "0.1.0"
 cg-sys = "0.1.0"
+failure = "0.1"
+failure_derive = "0.1"
 libc = "0.2.11"

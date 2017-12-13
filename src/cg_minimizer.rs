@@ -1,6 +1,6 @@
 use libc::{c_double, c_int};
 use cg::step;
-use std::{error, fmt};
+use failure;
 
 #[derive(Debug)]
 pub enum Success {
@@ -8,35 +8,20 @@ pub enum Success {
     ReachedMaxIter,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum Error {
     /// Improper input parameters.
+    #[fail(display = "improper input parameters")]
     BadInput,
     /// Descent was not obtained.
+    #[fail(display = "descent was not obtained")]
     NoDescent,
     /// Line search failure.
+    #[fail(display = "line search failure")]
     LineSearch,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error in CG minimization: ")?;
-        error::Error::description(self).fmt(f)
-    }
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::BadInput => "Improper input parameters",
-            Error::NoDescent => "Descent was not obtained",
-            Error::LineSearch => "Line search failure",
-        }
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        None
-    }
+    /// The objective function returned an error.
+    #[fail(display = "error in objective function")]
+    ObjectiveFn(failure::Error),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -51,7 +36,8 @@ enum Method {
 
 pub struct CG<'a, F>
 where
-    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+    F: Fn(&[c_double])
+        -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     n: c_int,
     x: &'a mut [c_double],
@@ -71,7 +57,8 @@ where
 
 impl<'a, F> CG<'a, F>
 where
-    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+    F: Fn(&[c_double])
+        -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
@@ -98,7 +85,7 @@ where
 
     // this function will start the optimization algorithm
     pub fn minimize(&mut self) -> Result<Success, Error> {
-        let (mut fval, mut gval) = (self.f)(self.x);
+        let (mut fval, mut gval) = (self.f)(self.x).map_err(|err| Error::ObjectiveFn(err.into()))?;
         let mut iter_num = 0;
         loop {
             if self.max_iter.is_some() && iter_num >= self.max_iter.unwrap() {
@@ -135,7 +122,7 @@ where
                 }
                 1 => {
                     // geting the function and gradient value
-                    let vals = (self.f)(self.x);
+                    let vals = (self.f)(self.x).map_err(|err| Error::ObjectiveFn(err.into()))?;
                     fval = vals.0;
                     gval = vals.1;
                 }

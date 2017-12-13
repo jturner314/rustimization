@@ -1,8 +1,6 @@
-extern crate failure;
 extern crate rustimization;
 
-use failure::Error;
-use rustimization::cg_minimizer::CG;
+use rustimization::lbfgsb_minimizer::Lbfgsb;
 
 const TRUE_MIN: [f64; 2] = [-1., 2.];
 
@@ -19,7 +17,7 @@ fn g(x: &[f64]) -> Vec<f64> {
 
 fn main() {
     let mut x = [0.; 2];
-    CG::new(&mut x, |x| Ok((f(x), g(x))))
+    Lbfgsb::new(&mut x, |x| Ok((f(x), g(x))))
         .minimize()
         .expect("Failed to minimize");
     println!("The minimum found is at {:?}", x);

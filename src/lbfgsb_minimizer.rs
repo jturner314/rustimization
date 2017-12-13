@@ -1,3 +1,4 @@
+use failure;
 use libc::{c_char, c_double, c_int};
 use std::ffi::CStr;
 use lbfgsb::step;
@@ -12,16 +13,21 @@ pub enum Success {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum Error {
     /// The routine has detected an error in the input parameters.
+    #[fail(display = "error in input parameters")]
     BadInput,
     /// The routine has terminated abnormally without being able to satisfy the
     /// termination conditions. `x` contains the best approximation found.
+    #[fail(display = "abnormal exit without satisfying termination conditions")]
     AbnormalExit {
         /// f(x) and g(x)
         f_g_x: (c_double, Vec<c_double>),
     },
+    /// The objective function returned an error.
+    #[fail(display = "error in objective function")]
+    ObjectiveFn(failure::Error),
 }
 
 const CSAVE_LEN: usize = 60;
@@ -31,7 +37,8 @@ const DSAVE_LEN: usize = 29;
 
 pub struct Lbfgsb<'a, F>
 where
-    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+    F: Fn(&[c_double])
+        -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     /// Number of variables.
     n: c_int,
@@ -95,7 +102,8 @@ where
 
 impl<'a, F> Lbfgsb<'a, F>
 where
-    F: Fn(&[c_double]) -> (c_double, Vec<c_double>),
+    F: Fn(&[c_double])
+        -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
@@ -153,7 +161,7 @@ where
             // converting to rust string
             let tsk = unsafe { CStr::from_ptr(self.task.as_ptr()).to_string_lossy() };
             if tsk.starts_with("FG") {
-                let vals = (self.f)(self.x);
+                let vals = (self.f)(self.x).map_err(|err| Error::ObjectiveFn(err))?;
                 fval = vals.0;
                 gval = vals.1;
             }
