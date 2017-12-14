@@ -26,8 +26,8 @@ pub enum Error {
         f_g_x: (c_double, Vec<c_double>),
     },
     /// The objective function returned an error.
-    #[fail(display = "error in objective function: {}", cause)]
-    ObjectiveFn { cause: failure::Error },
+    #[fail(display = "error in objective function: {}", _0)]
+    ObjectiveFn(failure::Error),
 }
 
 const CSAVE_LEN: usize = 60;
@@ -161,7 +161,7 @@ where
             // converting to rust string
             let tsk = unsafe { CStr::from_ptr(self.task.as_ptr()).to_string_lossy() };
             if tsk.starts_with("FG") {
-                let vals = (self.f)(self.x).map_err(|err| Error::ObjectiveFn { cause: err })?;
+                let vals = (self.f)(self.x).map_err(|err| Error::ObjectiveFn(err))?;
                 fval = vals.0;
                 gval = vals.1;
             }
