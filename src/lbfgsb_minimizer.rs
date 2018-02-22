@@ -37,8 +37,7 @@ const DSAVE_LEN: usize = 29;
 
 pub struct Lbfgsb<'a, F>
 where
-    F: Fn(&[c_double])
-        -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: Fn(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     /// Number of variables.
     n: c_int,
@@ -92,6 +91,7 @@ where
     /// Working array for the routine.
     csave: [c_char; CSAVE_LEN],
     /// Working array for the routine.
+    // TODO: is c_int correct here?
     lsave: [c_int; LSAVE_LEN],
     /// Working array for the routine.
     isave: [c_int; ISAVE_LEN],
@@ -102,25 +102,25 @@ where
 
 impl<'a, F> Lbfgsb<'a, F>
 where
-    F: Fn(&[c_double])
-        -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: Fn(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
     pub fn new(xvec: &'a mut [c_double], func: F) -> Self {
-        let len = xvec.len();
+        let n: usize = xvec.len();
+        let m: usize = 10; // `scipy.optimize.fmin_l_bfgs_b` default
         Lbfgsb {
-            n: len as i32,
-            m: 10, // `scipy.optimize.fmin_l_bfgs_b` default
+            n: n as i32,
+            m: m as i32,
             x: xvec,
-            l: vec![0.; len],
-            u: vec![0.; len],
-            nbd: vec![0; len],
+            l: vec![0.; n],
+            u: vec![0.; n],
+            nbd: vec![0; n],
             f: func,
             factr: 1e7,  // `scipy.optimize.fmin_l_bfgs_b` default
             pgtol: 1e-5, // `scipy.optimize.fmin_l_bfgs_b` default
-            wa: vec![0.; (2 * 5 * len + 11 * 5 * 5 + 5 * len + 8 * 5)],
-            iwa: vec![0; 3 * len],
+            wa: vec![0.; (2 * m + 5) * n + 12 * m * m + 12 * m],
+            iwa: vec![0; 3 * n],
             task: vec![0; 60],
             iprint: -1,
             csave: [0; CSAVE_LEN],
