@@ -36,7 +36,7 @@ enum Method {
 
 pub struct CG<'a, F>
 where
-    F: Fn(&[c_double])
+    F: FnMut(&[c_double])
         -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     n: c_int,
@@ -57,7 +57,7 @@ where
 
 impl<'a, F> CG<'a, F>
 where
-    F: Fn(&[c_double])
+    F: FnMut(&[c_double])
         -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     // constructor requres three mendatory parameter which is the initial

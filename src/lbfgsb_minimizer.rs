@@ -37,7 +37,7 @@ const DSAVE_LEN: usize = 29;
 
 pub struct Lbfgsb<'a, F>
 where
-    F: Fn(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: FnMut(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     /// Number of variables.
     n: c_int,
@@ -102,7 +102,7 @@ where
 
 impl<'a, F> Lbfgsb<'a, F>
 where
-    F: Fn(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: FnMut(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
 {
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function
