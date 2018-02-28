@@ -158,8 +158,8 @@ where
         self.iprint = v;
     }
 
-    // set tolernace
-    pub fn set_tolerance(&mut self, t: f64) {
-        self.eps = t;
+    /// Stop when the norm of the gradient is less than `gtol`.
+    pub fn set_gradient_tolerance(&mut self, gtol: f64) {
+        self.gtol = gtol;
     }
 }
