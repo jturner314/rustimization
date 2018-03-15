@@ -74,8 +74,6 @@ where
     /// The user can suppress this termination test by setting `pgtol` to `0.`.
     pgtol: c_double,
     /// Working array for the routine.
-    wa: Vec<c_double>,
-    /// Working array for the routine.
     iwa: Vec<c_int>,
     task: Vec<c_char>,
     /// Controls the frequency and type of output generated:
@@ -108,10 +106,9 @@ where
     // solution, function and the gradient function
     pub fn new(xvec: &'a mut [c_double], func: F) -> Self {
         let n: usize = xvec.len();
-        let m: usize = 10; // `scipy.optimize.fmin_l_bfgs_b` default
         Lbfgsb {
             n: n as i32,
-            m: m as i32,
+            m: 10, // `scipy.optimize.fmin_l_bfgs_b` default,
             x: xvec,
             l: vec![0.; n],
             u: vec![0.; n],
@@ -119,7 +116,6 @@ where
             f: func,
             factr: 1e7,  // `scipy.optimize.fmin_l_bfgs_b` default
             pgtol: 1e-5, // `scipy.optimize.fmin_l_bfgs_b` default
-            wa: vec![0.; (2 * m + 5) * n + 12 * m * m + 12 * m],
             iwa: vec![0; 3 * n],
             task: vec![0; 60],
             iprint: -1,
@@ -133,8 +129,13 @@ where
 
     // this function will start the optimization algorithm
     pub fn minimize(&mut self) -> Result<Success, Error> {
+        // Create the working array for the routine here because we need to know the latest `m`
+        let n = self.x.len();
+        let m = self.m as usize;
+        let mut wa: Vec<c_double> = vec![0.; 2 * m * n + 5 * n + 11 * m * m + 8 * m];
+
         let mut fval = 0.0f64;
-        let mut gval = vec![0.0f64; self.x.len()];
+        let mut gval = vec![0.0f64; n];
         // converting fortran string "START"
         stringfy(&mut self.task);
         loop {
@@ -149,7 +150,7 @@ where
                 &gval,
                 self.factr,
                 self.pgtol,
-                &mut self.wa,
+                &mut wa,
                 &mut self.iwa,
                 &mut self.task,
                 self.iprint,
