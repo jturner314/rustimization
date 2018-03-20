@@ -12,7 +12,7 @@ A rust optimization library which includes L-BFGS-B and Conjugate Gradient algor
 """
 
 [dependencies]
-lbfgsb-sys = "0.1.0"
+lbfgsb-sys = { git = "https://github.com/jturner314/lbfgsb-sys.git", branch = "master" }
 cg-sys = { git = "https://github.com/jturner314/cg-sys.git", branch = "master" }
 failure = "0.1"
 failure_derive = "0.1"
