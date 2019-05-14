@@ -1,7 +1,8 @@
-use failure;
-use libc::{c_char, c_double, c_int};
-use std::ffi::CStr;
 use lbfgsb::step;
+use libc::{c_char, c_double, c_int};
+use std::error;
+use std::ffi::CStr;
+use std::fmt;
 use string::stringfy;
 
 #[derive(Debug)]
@@ -13,21 +14,39 @@ pub enum Success {
     },
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum Error {
     /// The routine has detected an error in the input parameters.
-    #[fail(display = "error in input parameters")]
     BadInput,
     /// The routine has terminated abnormally without being able to satisfy the
     /// termination conditions. `x` contains the best approximation found.
-    #[fail(display = "abnormal exit without satisfying termination conditions")]
     AbnormalExit {
         /// f(x) and g(x)
         f_g_x: (c_double, Vec<c_double>),
     },
     /// The objective function returned an error.
-    #[fail(display = "error in objective function: {}", _0)]
-    ObjectiveFn(failure::Error),
+    ObjectiveFn(Box<error::Error + Send + Sync + 'static>),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::BadInput => write!(f, "error in input parameters"),
+            Error::AbnormalExit { .. } => {
+                write!(f, "abnormal exit without satisfying termination conditions")
+            }
+            Error::ObjectiveFn(err) => write!(f, "error in objective function: {}", err),
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Error::BadInput | Error::AbnormalExit { .. } => None,
+            Error::ObjectiveFn(err) => Some(&**err),
+        }
+    }
 }
 
 const CSAVE_LEN: usize = 60;
@@ -37,7 +56,9 @@ const DSAVE_LEN: usize = 29;
 
 pub struct Lbfgsb<'a, F>
 where
-    F: FnMut(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: FnMut(
+        &[c_double],
+    ) -> Result<(c_double, Vec<c_double>), Box<error::Error + Send + Sync + 'static>>,
 {
     /// Number of variables.
     n: c_int,
@@ -100,7 +121,9 @@ where
 
 impl<'a, F> Lbfgsb<'a, F>
 where
-    F: FnMut(&[c_double]) -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: FnMut(
+        &[c_double],
+    ) -> Result<(c_double, Vec<c_double>), Box<error::Error + Send + Sync + 'static>>,
 {
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function

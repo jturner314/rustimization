@@ -1,6 +1,7 @@
-use libc::{c_double, c_int};
 use cg::step;
-use failure;
+use libc::{c_double, c_int};
+use std::error;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Success {
@@ -8,20 +9,36 @@ pub enum Success {
     ReachedMaxIter,
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum Error {
     /// Improper input parameters.
-    #[fail(display = "improper input parameters")]
     BadInput,
     /// Descent was not obtained.
-    #[fail(display = "descent was not obtained")]
     NoDescent,
     /// Line search failure.
-    #[fail(display = "line search failure")]
     LineSearch,
     /// The objective function returned an error.
-    #[fail(display = "error in objective function: {}", _0)]
-    ObjectiveFn(failure::Error),
+    ObjectiveFn(Box<error::Error + Send + Sync + 'static>),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::BadInput => write!(f, "improper input parameters"),
+            Error::NoDescent => write!(f, "descent was not obtained"),
+            Error::LineSearch => write!(f, "line search failure"),
+            Error::ObjectiveFn(err) => write!(f, "error in objective function: {}", err),
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Error::BadInput | Error::NoDescent | Error::LineSearch => None,
+            Error::ObjectiveFn(err) => Some(&**err),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -36,8 +53,9 @@ enum Method {
 
 pub struct CG<'a, F>
 where
-    F: FnMut(&[c_double])
-        -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: FnMut(
+        &[c_double],
+    ) -> Result<(c_double, Vec<c_double>), Box<error::Error + Send + Sync + 'static>>,
 {
     n: c_int,
     x: &'a mut [c_double],
@@ -57,8 +75,9 @@ where
 
 impl<'a, F> CG<'a, F>
 where
-    F: FnMut(&[c_double])
-        -> Result<(c_double, Vec<c_double>), failure::Error>,
+    F: FnMut(
+        &[c_double],
+    ) -> Result<(c_double, Vec<c_double>), Box<error::Error + Send + Sync + 'static>>,
 {
     // constructor requres three mendatory parameter which is the initial
     // solution, function and the gradient function

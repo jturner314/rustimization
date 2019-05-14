@@ -1,6 +1,3 @@
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
 extern crate libc;
 extern crate lbfgsb_sys;
 extern crate cg_sys;

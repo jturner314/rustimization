@@ -1,7 +1,5 @@
-extern crate failure;
 extern crate rustimization;
 
-use failure::Error;
 use rustimization::cg_minimizer::CG;
 
 const TRUE_MIN: [f64; 2] = [-1., 2.];
